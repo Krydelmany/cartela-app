@@ -35,6 +35,7 @@ jobs:
           flutter create --platforms=android --org br.com.giovani --project-name cartela_app .
           mv pubspec.yaml.bak pubspec.yaml
           rm -rf lib && mv lib_bak lib
+          rm -f test/widget_test.dart
 
       - name: Get dependencies & Run tests
         run: |
