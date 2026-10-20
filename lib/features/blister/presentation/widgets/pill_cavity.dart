@@ -66,6 +66,21 @@ class _PillCavityState extends State<PillCavity>
     widget.onTap();
   }
 
+  String get _semanticLabel {
+    final number = widget.pillIndex + 1;
+    switch (widget.status) {
+      case CavityStatus.taken:
+        return 'Comprimido $number, já tomado. Toque para devolver à cartela.';
+      case CavityStatus.overdue:
+        return 'Comprimido $number, atrasado. Toque para marcar como tomado.';
+      case CavityStatus.currentTarget:
+        return 'Comprimido $number, o de agora. Toque para marcar como tomado.';
+      case CavityStatus.intact:
+        return 'Comprimido $number, ainda na cartela. '
+            'Toque para marcar como tomado.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final spec = widget.spec;
@@ -76,13 +91,18 @@ class _PillCavityState extends State<PillCavity>
     final overdue = widget.status == CavityStatus.overdue;
     final target = widget.status == CavityStatus.currentTarget;
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapCancel: () => setState(() => _pressed = false),
-      onTapUp: (_) => setState(() => _pressed = false),
+    return Semantics(
+      button: true,
+      label: _semanticLabel,
       onTap: _handleTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedScale(
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTapDown: (_) => setState(() => _pressed = true),
+        onTapCancel: () => setState(() => _pressed = false),
+        onTapUp: (_) => setState(() => _pressed = false),
+        onTap: _handleTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedScale(
         scale: _pressed ? 0.94 : 1.0,
         duration: Motion.quick,
         curve: Curves.easeOut,
@@ -180,6 +200,7 @@ class _PillCavityState extends State<PillCavity>
             },
           ),
         ),
+      ),
       ),
     );
   }
