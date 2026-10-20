@@ -6,6 +6,9 @@ class BlisterTemplate {
   final String id;
   final String name;
   final String subtitle;
+
+  /// Short label for pickers, e.g. "10 oblongos".
+  final String shortLabel;
   final int rows;
   final int columns;
   final PillVisualSpec pillSpec;
@@ -30,6 +33,7 @@ class BlisterTemplate {
     required this.id,
     required this.name,
     required this.subtitle,
+    this.shortLabel = '',
     required this.rows,
     required this.columns,
     required this.pillSpec,

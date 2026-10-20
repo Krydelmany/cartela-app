@@ -11,22 +11,23 @@ class PresetTemplates {
   static final BlisterTemplate oblongYellow10 = BlisterTemplate(
     id: 'oblong_yellow_2x5',
     name: 'Cartela 10 comprimidos',
+    shortLabel: '10 oblongos',
     subtitle: 'Oblongo horizontal, com sulco',
     rows: 5,
     columns: 2,
     stampedCode: 'L 2504291   V 06/28',
     stampAtTop: true,
-    boardWidth: 280,
+    boardWidth: 300,
     boardPaddingH: 20,
-    boardPaddingV: 22,
-    rowSpacing: 15,
+    boardPaddingV: 24,
+    rowSpacing: 16,
     pillSpec: const PillVisualSpec(
       kind: PillKind.oblongHorizontal,
       color: Color(0xFFC9A25A),
       shadowColor: Color(0xFF7A5720),
       hasScoreLine: true,
-      width: 92,
-      height: 42,
+      width: 96,
+      height: 44,
     ),
     grid: List.generate(
       5,
@@ -38,22 +39,23 @@ class PresetTemplates {
   static final BlisterTemplate roundCross15 = BlisterTemplate(
     id: 'round_cross_15',
     name: 'Cartela 15 comprimidos',
+    shortLabel: '15 com cruz',
     subtitle: 'Redondo, com dois relevos em cruz',
     rows: 6,
     columns: 3,
     stampedCode: 'V01/28   L26A987',
     stampAtTop: true,
-    boardWidth: 276,
+    boardWidth: 296,
     boardPaddingH: 18,
-    boardPaddingV: 22,
-    rowSpacing: 9,
+    boardPaddingV: 24,
+    rowSpacing: 10,
     pillSpec: const PillVisualSpec(
       kind: PillKind.round,
       color: Color(0xFFF2F0E8),
       shadowColor: Color(0xFF9C9788),
       hasScoreLine: true,
-      width: 52,
-      height: 52,
+      width: 54,
+      height: 54,
     ),
     grid: const [
       [
@@ -93,23 +95,24 @@ class PresetTemplates {
   static final BlisterTemplate verticalCapsule15 = BlisterTemplate(
     id: 'vertical_capsule_15',
     name: 'Cartela 15 comprimidos',
+    shortLabel: '15 verticais',
     subtitle: 'Cápsula vertical, com frisos',
     rows: 5,
     columns: 3,
     hasVerticalRibs: true,
     stampedCode: 'L26050510   V05/28',
     stampAtTop: false,
-    boardWidth: 262,
+    boardWidth: 284,
     boardPaddingH: 20,
-    boardPaddingV: 20,
-    rowSpacing: 11,
+    boardPaddingV: 22,
+    rowSpacing: 12,
     pillSpec: const PillVisualSpec(
       kind: PillKind.capsuleVertical,
       color: Color(0xFFEDEAE0),
       shadowColor: Color(0xFF9A9585),
       hasScoreLine: false,
-      width: 36,
-      height: 68,
+      width: 38,
+      height: 72,
     ),
     grid: List.generate(
       5,
@@ -121,22 +124,23 @@ class PresetTemplates {
   static final BlisterTemplate denseOval30 = BlisterTemplate(
     id: 'dense_oval_30',
     name: 'Cartela 30 comprimidos',
+    shortLabel: '30 ovais',
     subtitle: 'Oval compacto, com sulco',
     rows: 6,
     columns: 5,
     stampedCode: 'L2511092   V11/27',
     stampAtTop: true,
-    boardWidth: 300,
+    boardWidth: 330,
     boardPaddingH: 14,
-    boardPaddingV: 18,
-    rowSpacing: 8,
+    boardPaddingV: 20,
+    rowSpacing: 9,
     pillSpec: const PillVisualSpec(
       kind: PillKind.ovalVertical,
       color: Color(0xFFF4F2EA),
       shadowColor: Color(0xFFA5A091),
       hasScoreLine: true,
-      width: 38,
-      height: 54,
+      width: 40,
+      height: 56,
     ),
     grid: List.generate(
       6,
@@ -144,13 +148,26 @@ class PresetTemplates {
     ),
   );
 
+  static final List<BlisterTemplate> all = [
+    oblongYellow10,
+    roundCross15,
+    verticalCapsule15,
+    denseOval30,
+  ];
+
+  static BlisterTemplate? byId(String id) {
+    for (final template in all) {
+      if (template.id == id) return template;
+    }
+    return null;
+  }
+
   static List<MedicationPack> createSamplePacks(DateTime now) {
     return [
       // Straight on schedule: the seventh dose is the one to look for.
       MedicationPack(
         id: 'pack_1',
         medicationName: 'Amarelo',
-        dosageLabel: '1 comprimido a cada 12 horas',
         template: oblongYellow10,
         startedAt: now.subtract(const Duration(hours: 84)),
         doseInterval: const Duration(hours: 12),
@@ -160,7 +177,6 @@ class PresetTemplates {
       MedicationPack(
         id: 'pack_2',
         medicationName: 'Cruz',
-        dosageLabel: '1 comprimido ao dia',
         template: roundCross15,
         startedAt: now.subtract(const Duration(days: 16, hours: 4)),
         doseInterval: const Duration(hours: 24),
@@ -169,7 +185,6 @@ class PresetTemplates {
       MedicationPack(
         id: 'pack_3',
         medicationName: 'Vertical',
-        dosageLabel: '1 comprimido a cada 8 horas',
         template: verticalCapsule15,
         startedAt: now.subtract(const Duration(hours: 88)),
         doseInterval: const Duration(hours: 8),
@@ -178,7 +193,6 @@ class PresetTemplates {
       MedicationPack(
         id: 'pack_4',
         medicationName: 'Oval',
-        dosageLabel: '1 comprimido ao dia',
         template: denseOval30,
         startedAt: now.subtract(const Duration(days: 26)),
         doseInterval: const Duration(hours: 24),

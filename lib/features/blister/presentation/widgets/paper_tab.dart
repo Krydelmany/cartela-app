@@ -32,6 +32,8 @@ class PaperTab extends StatelessWidget {
         transformAlignment: Alignment.bottomCenter,
         transform: Matrix4.translationValues(0, active ? -5.0 : 3.0, 0)
           ..rotateZ(active ? 0.0 : (index.isEven ? -0.05 : 0.042)),
+        constraints: const BoxConstraints(minHeight: 44, maxWidth: 150),
+        alignment: Alignment.center,
         padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 9),
         decoration: BoxDecoration(
           color: active ? Paper.slip : Paper.sheetDeep,
@@ -52,6 +54,8 @@ class PaperTab extends StatelessWidget {
         ),
         child: Text(
           label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: Hand.text(
             size: 13,
             weight: active ? 600 : 500,

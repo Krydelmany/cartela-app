@@ -1,6 +1,5 @@
 import 'dart:ui' show PointMode;
 import 'package:flutter/material.dart';
-import '../../../../core/design/motion.dart';
 import '../../../../core/design/paper.dart';
 import '../../domain/blister_slot.dart';
 import '../../domain/blister_template.dart';
@@ -10,128 +9,56 @@ import 'pill_cavity.dart';
 
 /// The prescription slip, with the aluminum blister lying on top of it.
 /// Two materials: paper (3px corners) and foil (20px corners).
-class BlisterSheet extends StatefulWidget {
+///
+/// Static on purpose: the earlier breathing loop repainted the whole sheet
+/// every frame, and an animated shadow blur repainted the blur at 60 fps.
+class BlisterSheet extends StatelessWidget {
   final MedicationPack pack;
   final DateTime now;
   final ValueChanged<int> onPillTap;
-  final VoidCallback onEditStart;
+  final VoidCallback onEditPack;
 
   const BlisterSheet({
     super.key,
     required this.pack,
     required this.now,
     required this.onPillTap,
-    required this.onEditStart,
+    required this.onEditPack,
   });
 
   @override
-  State<BlisterSheet> createState() => _BlisterSheetState();
-}
-
-class _BlisterSheetState extends State<BlisterSheet>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _breath;
-  Offset _tilt = Offset.zero;
-  bool _breathStarted = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _breath = AnimationController(vsync: this, duration: Motion.breathe);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_breathStarted) return;
-    _breathStarted = true;
-    // The pack is a loose object on a desk: it moves a fraction of a degree.
-    if (!Motion.reduce(context)) _breath.repeat(reverse: true);
-  }
-
-  @override
-  void dispose() {
-    _breath.dispose();
-    super.dispose();
-  }
-
-  void _pointDown(PointerDownEvent event) {
-    final box = context.findRenderObject() as RenderBox?;
-    if (box == null || !box.hasSize) return;
-    final local = box.globalToLocal(event.position);
-    final nx = (local.dx / box.size.width) * 2 - 1;
-    final ny = (local.dy / box.size.height) * 2 - 1;
-    setState(() {
-      _tilt = Offset(nx.clamp(-1.0, 1.0), ny.clamp(-1.0, 1.0));
-    });
-  }
-
-  void _pointUp() {
-    if (_tilt == Offset.zero) return;
-    setState(() => _tilt = Offset.zero);
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Listener(
-      onPointerDown: _pointDown,
-      onPointerUp: (_) => _pointUp(),
-      onPointerCancel: (_) => _pointUp(),
-      child: AnimatedBuilder(
-        animation: _breath,
-        builder: (context, child) {
-          final b = _breath.value;
-          final angle = -0.024 + b * 0.010;
-          final shadowBlur = 18.0 + b * 9;
-
-          return TweenAnimationBuilder<Offset>(
-            tween: Tween(begin: Offset.zero, end: _tilt),
-            duration: const Duration(milliseconds: 420),
-            curve: Curves.easeOutCubic,
-            builder: (context, tilt, child) {
-              return Transform(
-                alignment: Alignment.center,
-                transform: Matrix4.identity()
-                  ..setEntry(3, 2, 0.0012)
-                  ..rotateX(-tilt.dy * 0.07)
-                  ..rotateY(tilt.dx * 0.07),
-                child: child,
-              );
-            },
-            child: Transform.rotate(
-              angle: angle,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(3),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF2B2418).withOpacity(0.16),
-                      blurRadius: shadowBlur,
-                      spreadRadius: -6,
-                      offset: const Offset(0, 12),
-                    ),
-                    const BoxShadow(
-                      color: Color(0x0D2B2418),
-                      blurRadius: 2,
-                      offset: Offset(0, 1),
-                    ),
-                  ],
-                ),
-                child: child!,
+    return Transform.rotate(
+      angle: -0.022,
+      child: RepaintBoundary(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            borderRadius: BorderRadius.all(Radius.circular(3)),
+            boxShadow: [
+              BoxShadow(
+                color: Color(0x292B2418),
+                blurRadius: 26,
+                spreadRadius: -6,
+                offset: Offset(0, 12),
               ),
-            ),
-          );
-        },
-        child: _buildSlip(),
+              BoxShadow(
+                color: Color(0x0D2B2418),
+                blurRadius: 2,
+                offset: Offset(0, 1),
+              ),
+            ],
+          ),
+          child: _slip(context),
+        ),
       ),
     );
   }
 
-  Widget _buildSlip() {
-    final template = widget.pack.template;
+  Widget _slip(BuildContext context) {
+    final template = pack.template;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(13, 12, 13, 10),
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 8),
       decoration: BoxDecoration(
         color: Paper.slip,
         borderRadius: BorderRadius.circular(3),
@@ -148,6 +75,8 @@ class _BlisterSheetState extends State<BlisterSheet>
               Expanded(
                 child: Text(
                   template.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: Hand.display(
                     size: 14,
                     weight: 600,
@@ -155,53 +84,67 @@ class _BlisterSheetState extends State<BlisterSheet>
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
               Text(
-                '${widget.pack.takenCount} de ${template.totalPills}',
+                '${pack.takenCount} de ${template.totalPills}',
                 style: Hand.numeric(size: 10, color: Paper.inkFaint),
               ),
             ],
           ),
           const SizedBox(height: 1),
           Text(
-            widget.pack.dosageLabel,
+            pack.dosageLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: Hand.text(size: 10.5, color: Paper.inkSoft),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 11),
           Center(
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Transform.rotate(
                 angle: 0.026,
-                child: _buildFoil(template),
+                child: _foil(template),
               ),
             ),
           ),
-          const SizedBox(height: 9),
-          GestureDetector(
-            onTap: widget.onEditStart,
-            behavior: HitTestBehavior.opaque,
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.edit_outlined,
-                  size: 12,
-                  color: Paper.inkFaint,
+          const SizedBox(height: 6),
+          Semantics(
+            button: true,
+            label: 'Editar cartela',
+            child: GestureDetector(
+              onTap: onEditPack,
+              behavior: HitTestBehavior.opaque,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 44),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.edit_outlined,
+                      size: 13,
+                      color: Paper.inkFaint,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Editar cartela',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Hand.text(
+                          size: 11,
+                          color: Paper.inkSoft,
+                          weight: 600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'restam ${pack.remainingCount}',
+                      style: Hand.numeric(size: 10.5, color: Paper.inkSoft),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 5),
-                Text(
-                  'iniciada em ${_shortDate(widget.pack.startedAt)}',
-                  style: Hand.text(
-                    size: 10.5,
-                    color: Paper.inkFaint,
-                    weight: 500,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  'restam ${widget.pack.remainingCount}',
-                  style: Hand.numeric(size: 10.5, color: Paper.inkSoft),
-                ),
-              ],
+              ),
             ),
           ),
         ],
@@ -209,7 +152,7 @@ class _BlisterSheetState extends State<BlisterSheet>
     );
   }
 
-  Widget _buildFoil(BlisterTemplate template) {
+  Widget _foil(BlisterTemplate template) {
     return Container(
       width: template.boardWidth,
       decoration: BoxDecoration(
@@ -249,7 +192,7 @@ class _BlisterSheetState extends State<BlisterSheet>
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       for (var c = 0; c < template.columns; c++)
-                        _buildSlot(template, template.grid[r][c]),
+                        _slot(template, template.grid[r][c]),
                     ],
                   ),
                 ],
@@ -265,7 +208,7 @@ class _BlisterSheetState extends State<BlisterSheet>
     );
   }
 
-  Widget _buildSlot(BlisterTemplate template, BlisterSlot slot) {
+  Widget _slot(BlisterTemplate template, BlisterSlot slot) {
     final spec = template.pillSpec;
     final w = spec.width + 14;
     final h = spec.height + 14;
@@ -285,8 +228,8 @@ class _BlisterSheetState extends State<BlisterSheet>
         child = PillCavity(
           pillIndex: index,
           spec: spec,
-          status: widget.pack.statusForPill(index, widget.now),
-          onTap: () => widget.onPillTap(index),
+          status: pack.statusForPill(index, now),
+          onTap: () => onPillTap(index),
         );
     }
 
@@ -297,26 +240,6 @@ class _BlisterSheetState extends State<BlisterSheet>
       );
     }
     return child;
-  }
-
-  static String _shortDate(DateTime d) {
-    const months = [
-      'jan',
-      'fev',
-      'mar',
-      'abr',
-      'mai',
-      'jun',
-      'jul',
-      'ago',
-      'set',
-      'out',
-      'nov',
-      'dez',
-    ];
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '${d.day} ${months[d.month - 1]}, $hh:$mm';
   }
 }
 
@@ -396,7 +319,8 @@ class _FoilPainter extends CustomPainter {
     );
 
     // Knurling: two point clouds, offset like a diamond grid.
-    const step = 5.0;
+    // Step 6 keeps the texture readable while cutting the point count ~30%.
+    const step = 6.0;
     final dark = <Offset>[];
     final light = <Offset>[];
     var row = 0;
@@ -404,7 +328,7 @@ class _FoilPainter extends CustomPainter {
       final shift = row.isEven ? 0.0 : step / 2;
       for (double x = 3 + shift; x < size.width - 3; x += step) {
         dark.add(Offset(x, y));
-        light.add(Offset(x + 0.75, y + 0.75));
+        light.add(Offset(x + 0.8, y + 0.8));
       }
       row++;
     }
@@ -414,7 +338,7 @@ class _FoilPainter extends CustomPainter {
       dark,
       Paint()
         ..color = const Color(0xFF5F6772).withOpacity(0.16)
-        ..strokeWidth = 1.15
+        ..strokeWidth = 1.2
         ..strokeCap = StrokeCap.round,
     );
     canvas.drawPoints(
@@ -422,7 +346,7 @@ class _FoilPainter extends CustomPainter {
       light,
       Paint()
         ..color = Colors.white.withOpacity(0.42)
-        ..strokeWidth = 1.0
+        ..strokeWidth = 1.1
         ..strokeCap = StrokeCap.round,
     );
 

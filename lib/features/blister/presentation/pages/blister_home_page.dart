@@ -4,9 +4,11 @@ import '../../../../core/design/motion.dart';
 import '../../../../core/design/paper.dart';
 import '../../../../core/design/paper_grain.dart';
 import '../../../../core/design/pencil_ring.dart';
+import '../../data/pack_store.dart';
 import '../../data/preset_templates.dart';
 import '../../domain/medication_pack.dart';
 import '../widgets/blister_sheet.dart';
+import '../widgets/pack_editor.dart';
 import '../widgets/paper_tab.dart';
 
 class BlisterHomePage extends StatefulWidget {
@@ -29,13 +31,24 @@ class _BlisterHomePageState extends State<BlisterHomePage>
   void initState() {
     super.initState();
     _now = DateTime.now();
+    // Samples paint immediately; the stored packs replace them in a tick.
     _packs = PresetTemplates.createSamplePacks(_now);
     _enter = AnimationController(vsync: this, duration: Motion.land)
       ..forward();
+    _restore();
     // The schedule is time-based: refresh the reading every half minute.
     _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!mounted) return;
       setState(() => _now = DateTime.now());
+    });
+  }
+
+  Future<void> _restore() async {
+    final loaded = await PackStore.load(_now);
+    if (!mounted) return;
+    setState(() {
+      _packs = loaded;
+      _selected = _selected.clamp(0, _packs.length - 1);
     });
   }
 
@@ -56,58 +69,42 @@ class _BlisterHomePageState extends State<BlisterHomePage>
 
   MedicationPack get _pack => _packs[_selected];
 
-  void _togglePill(int index) {
-    setState(() {
-      _packs[_selected] = _pack.togglePill(index);
-    });
+  void _select(int index) {
+    if (index == _selected) return;
+    setState(() => _selected = index);
   }
 
-  Future<void> _editStart() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _pack.startedAt,
-      firstDate: _now.subtract(const Duration(days: 120)),
-      lastDate: _now.add(const Duration(days: 7)),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: Paper.ink,
-            surface: Paper.slip,
-            onSurface: Paper.ink,
-          ),
-        ),
-        child: child!,
-      ),
-    );
-    if (date == null || !mounted) return;
+  void _togglePill(int index) {
+    setState(() => _packs[_selected] = _pack.togglePill(index));
+    unawaited(PackStore.save(_packs));
+  }
 
-    final time = await showTimePicker(
+  Future<void> _openEditor({MedicationPack? pack, int? index}) async {
+    final result = await showModalBottomSheet<PackEditorResult>(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_pack.startedAt),
-      builder: (context, child) => Theme(
-        data: Theme.of(context).copyWith(
-          colorScheme: const ColorScheme.light(
-            primary: Paper.ink,
-            surface: Paper.slip,
-            onSurface: Paper.ink,
-          ),
-        ),
-        child: child!,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: const Color(0x3326241E),
+      builder: (_) => PackEditor(
+        initial: pack,
+        canDelete: index != null && _packs.length > 1,
+        now: _now,
       ),
     );
-    if (time == null || !mounted) return;
+    if (result == null || !mounted) return;
 
     setState(() {
-      _packs[_selected] = _pack.copyWith(
-        startedAt: DateTime(
-          date.year,
-          date.month,
-          date.day,
-          time.hour,
-          time.minute,
-        ),
-      );
+      if (result.delete) {
+        _packs.removeAt(index!);
+        if (_selected >= _packs.length) _selected = _packs.length - 1;
+      } else if (index == null) {
+        _packs.add(result.pack!);
+        _selected = _packs.length - 1;
+      } else {
+        _packs[index] = result.pack!;
+      }
     });
+    unawaited(PackStore.save(_packs));
   }
 
   @override
@@ -120,71 +117,78 @@ class _BlisterHomePageState extends State<BlisterHomePage>
         children: [
           const Positioned.fill(child: PaperGrain()),
           SafeArea(
-            bottom: false,
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(
-                parent: AlwaysScrollableScrollPhysics(),
-              ),
-              padding: const EdgeInsets.fromLTRB(
-                Paper.margin,
-                10,
-                Paper.margin,
-                28,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _masthead(),
-                  const SizedBox(height: 3),
-                  const HandDrawnRule(),
-                  const SizedBox(height: 22),
-                  _entrance(
-                    from: 0.04,
-                    to: 0.52,
-                    slide: 12,
-                    child: _heroBlock(hero),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 440),
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(
+                    parent: AlwaysScrollableScrollPhysics(),
                   ),
-                  const SizedBox(height: 22),
-                  _entrance(
-                    from: 0.14,
-                    to: 0.62,
-                    slide: 10,
-                    child: _tabs(),
+                  padding: const EdgeInsets.fromLTRB(
+                    Paper.margin,
+                    10,
+                    Paper.margin,
+                    26,
                   ),
-                  const SizedBox(height: 16),
-                  _entrance(
-                    from: 0.28,
-                    to: 1.0,
-                    slide: 18,
-                    overshoot: true,
-                    child: AnimatedSwitcher(
-                      duration: Motion.flip,
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      transitionBuilder: (child, animation) =>
-                          _PageFlip(animation: animation, child: child),
-                      child: BlisterSheet(
-                        key: ValueKey(_pack.id),
-                        pack: _pack,
-                        now: _now,
-                        onPillTap: _togglePill,
-                        onEditStart: _editStart,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _masthead(),
+                      const SizedBox(height: 3),
+                      const HandDrawnRule(),
+                      const SizedBox(height: 22),
+                      _entrance(
+                        from: 0.04,
+                        to: 0.52,
+                        slide: 12,
+                        child: _heroBlock(hero),
                       ),
-                    ),
+                      const SizedBox(height: 22),
+                      _entrance(
+                        from: 0.14,
+                        to: 0.62,
+                        slide: 10,
+                        child: _tabs(),
+                      ),
+                      const SizedBox(height: 16),
+                      _entrance(
+                        from: 0.28,
+                        to: 1.0,
+                        slide: 18,
+                        overshoot: true,
+                        child: AnimatedSwitcher(
+                          duration: Motion.flip,
+                          switchInCurve: Curves.easeOutCubic,
+                          switchOutCurve: Curves.easeInCubic,
+                          transitionBuilder: (child, animation) =>
+                              _PageFlip(animation: animation, child: child),
+                          child: BlisterSheet(
+                            key: ValueKey(_pack.id),
+                            pack: _pack,
+                            now: _now,
+                            onPillTap: _togglePill,
+                            onEditPack: () => _openEditor(
+                              pack: _pack,
+                              index: _selected,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _legend(),
+                      const SizedBox(height: 14),
+                      Text(
+                        'Toque num comprimido para marcá-lo.',
+                        textAlign: TextAlign.center,
+                        style: Hand.text(
+                          size: 11,
+                          color: Paper.inkFaint,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                  _legend(),
-                  const SizedBox(height: 14),
-                  Text(
-                    'Toque num comprimido para marcá-lo.',
-                    textAlign: TextAlign.center,
-                    style: Hand.text(
-                      size: 11,
-                      color: Paper.inkFaint,
-                      height: 1.3,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -224,25 +228,28 @@ class _BlisterHomePageState extends State<BlisterHomePage>
   }
 
   Widget _heroBlock(_Hero hero) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          hero.lead,
-          style: Hand.display(size: 39, weight: 500, height: 0.98),
-        ),
-        Text(
-          hero.tail,
-          style: Hand.display(
-            size: 39,
-            weight: 400,
-            italic: true,
-            height: 1.02,
+    return Semantics(
+      liveRegion: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hero.lead,
+            style: Hand.display(size: 39, weight: 500, height: 0.98),
           ),
-        ),
-        const SizedBox(height: 9),
-        Text(hero.note, style: Hand.text(size: 12.5, color: Paper.inkSoft)),
-      ],
+          Text(
+            hero.tail,
+            style: Hand.display(
+              size: 39,
+              weight: 400,
+              italic: true,
+              height: 1.02,
+            ),
+          ),
+          const SizedBox(height: 9),
+          Text(hero.note, style: Hand.text(size: 12.5, color: Paper.inkSoft)),
+        ],
+      ),
     );
   }
 
@@ -260,9 +267,11 @@ class _BlisterHomePageState extends State<BlisterHomePage>
                 label: _packs[i].medicationName,
                 index: i,
                 active: i == _selected,
-                onTap: () => setState(() => _selected = i),
+                onTap: () => _select(i),
               ),
             ],
+            const SizedBox(width: 7),
+            _AddTab(onTap: () => _openEditor()),
           ],
         ),
       ),
@@ -273,12 +282,7 @@ class _BlisterHomePageState extends State<BlisterHomePage>
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        PencilRing(
-          width: 14,
-          height: 14,
-          progress: 1,
-          seed: 3,
-        ),
+        const PencilRing(width: 14, height: 14, progress: 1, seed: 3),
         const SizedBox(width: 6),
         Text(
           'o de agora',
@@ -333,6 +337,38 @@ class _BlisterHomePageState extends State<BlisterHomePage>
         );
       },
       child: child,
+    );
+  }
+}
+
+class _AddTab extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _AddTab({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Adicionar cartela',
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Container(
+          width: 44,
+          height: 40,
+          decoration: BoxDecoration(
+            color: Paper.sheetDeep.withOpacity(0.6),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
+            border: Border.all(color: Paper.rule.withOpacity(0.55)),
+          ),
+          child: const Icon(
+            Icons.add,
+            size: 17,
+            color: Paper.inkSoft,
+          ),
+        ),
+      ),
     );
   }
 }

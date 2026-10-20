@@ -9,7 +9,6 @@ void main() {
     return MedicationPack(
       id: 'test',
       medicationName: 'Teste',
-      dosageLabel: 'a cada 12 horas',
       template: PresetTemplates.oblongYellow10,
       startedAt: start,
       doseInterval: const Duration(hours: 12),
@@ -47,5 +46,13 @@ void main() {
   test('cartela vazia não tem próximo', () {
     final pack = packWith({0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
     expect(pack.nextIndex, isNull);
+  });
+
+  test('intervalo gera o rótulo de dose', () {
+    expect(
+      packWith({}).copyWith(doseInterval: const Duration(hours: 24)).dosageLabel,
+      '1 comprimido ao dia',
+    );
+    expect(packWith({}).dosageLabel, '1 comprimido a cada 12 horas');
   });
 }

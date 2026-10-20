@@ -17,7 +17,6 @@ enum CavityStatus {
 class MedicationPack {
   final String id;
   final String medicationName;
-  final String dosageLabel;
   final BlisterTemplate template;
   final DateTime startedAt;
   final Duration doseInterval;
@@ -26,7 +25,6 @@ class MedicationPack {
   const MedicationPack({
     required this.id,
     required this.medicationName,
-    required this.dosageLabel,
     required this.template,
     required this.startedAt,
     required this.doseInterval,
@@ -36,6 +34,14 @@ class MedicationPack {
   int get takenCount => takenIndices.length;
 
   int get remainingCount => template.totalPills - takenCount;
+
+  /// Derived, never stored: one label per interval, so the two never disagree.
+  String get dosageLabel {
+    final hours = doseInterval.inHours;
+    if (hours >= 24) return '1 comprimido ao dia';
+    if (hours <= 1) return '1 comprimido por hora';
+    return '1 comprimido a cada $hours horas';
+  }
 
   /// Doses that should have left the pack by [now]. Dose 0 is taken at [startedAt].
   int expectedTakenCountAt(DateTime now) {
@@ -87,7 +93,7 @@ class MedicationPack {
 
   MedicationPack copyWith({
     String? medicationName,
-    String? dosageLabel,
+    BlisterTemplate? template,
     DateTime? startedAt,
     Duration? doseInterval,
     Set<int>? takenIndices,
@@ -95,8 +101,7 @@ class MedicationPack {
     return MedicationPack(
       id: id,
       medicationName: medicationName ?? this.medicationName,
-      dosageLabel: dosageLabel ?? this.dosageLabel,
-      template: template,
+      template: template ?? this.template,
       startedAt: startedAt ?? this.startedAt,
       doseInterval: doseInterval ?? this.doseInterval,
       takenIndices: takenIndices ?? this.takenIndices,
