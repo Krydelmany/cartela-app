@@ -1,9 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import '../../../../core/theme/app_theme.dart';
+import '../../../../core/design/motion.dart';
+import '../../../../core/design/paper.dart';
+import '../../../../core/design/paper_grain.dart';
+import '../../../../core/design/pencil_ring.dart';
 import '../../data/preset_templates.dart';
 import '../../domain/medication_pack.dart';
-import '../widgets/blister_board.dart';
+import '../widgets/blister_sheet.dart';
+import '../widgets/paper_tab.dart';
 
 class BlisterHomePage extends StatefulWidget {
   const BlisterHomePage({super.key});
@@ -12,321 +16,430 @@ class BlisterHomePage extends StatefulWidget {
   State<BlisterHomePage> createState() => _BlisterHomePageState();
 }
 
-class _BlisterHomePageState extends State<BlisterHomePage> {
-  late final DateTime _now;
+class _BlisterHomePageState extends State<BlisterHomePage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _enter;
   late List<MedicationPack> _packs;
-  int _selectedIndex = 0;
+  late DateTime _now;
+  int _selected = 0;
+  Timer? _ticker;
+  bool _reducedChecked = false;
 
   @override
   void initState() {
     super.initState();
     _now = DateTime.now();
     _packs = PresetTemplates.createSamplePacks(_now);
-  }
-
-  MedicationPack get _currentPack => _packs[_selectedIndex];
-
-  void _togglePill(int pillIndex) {
-    HapticFeedback.lightImpact();
-    setState(() {
-      _packs[_selectedIndex] = _currentPack.togglePill(pillIndex);
+    _enter = AnimationController(vsync: this, duration: Motion.land)
+      ..forward();
+    // The schedule is time-based: refresh the reading every half minute.
+    _ticker = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted) return;
+      setState(() => _now = DateTime.now());
     });
   }
 
-  Future<void> _pickStartDate() async {
-    final pickedDate = await showDatePicker(
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_reducedChecked) return;
+    _reducedChecked = true;
+    if (Motion.reduce(context)) _enter.value = 1;
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _enter.dispose();
+    super.dispose();
+  }
+
+  MedicationPack get _pack => _packs[_selected];
+
+  void _togglePill(int index) {
+    setState(() {
+      _packs[_selected] = _pack.togglePill(index);
+    });
+  }
+
+  Future<void> _editStart() async {
+    final date = await showDatePicker(
       context: context,
-      initialDate: _currentPack.startedAt,
-      firstDate: _now.subtract(const Duration(days: 90)),
+      initialDate: _pack.startedAt,
+      firstDate: _now.subtract(const Duration(days: 120)),
       lastDate: _now.add(const Duration(days: 7)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Paper.ink,
+            surface: Paper.slip,
+            onSurface: Paper.ink,
+          ),
+        ),
+        child: child!,
+      ),
     );
-    if (pickedDate == null || !mounted) return;
+    if (date == null || !mounted) return;
 
-    final pickedTime = await showTimePicker(
+    final time = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_currentPack.startedAt),
+      initialTime: TimeOfDay.fromDateTime(_pack.startedAt),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: Paper.ink,
+            surface: Paper.slip,
+            onSurface: Paper.ink,
+          ),
+        ),
+        child: child!,
+      ),
     );
-    if (pickedTime == null || !mounted) return;
-
-    final newStart = DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
+    if (time == null || !mounted) return;
 
     setState(() {
-      _packs[_selectedIndex] = _currentPack.copyWith(startedAt: newStart);
+      _packs[_selected] = _pack.copyWith(
+        startedAt: DateTime(
+          date.year,
+          date.month,
+          date.day,
+          time.hour,
+          time.minute,
+        ),
+      );
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final pack = _currentPack;
-    final total = pack.template.totalPills;
-    final takenCount = pack.takenIndices.length;
-    final expectedCount = pack.expectedTakenCountAt(_now);
-    final diff = takenCount - expectedCount;
+    final hero = _heroCopy(_pack, _now);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Minhas Cartelas',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 22),
-            ),
-            Text(
-              'Toque no comprimido para destacar ou devolver',
-              style: TextStyle(fontSize: 12, color: Colors.white60),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Ajustar início da cartela',
-            onPressed: _pickStartDate,
-            icon: const Icon(Icons.calendar_month_outlined),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-
-            // 1. Seletor horizontal de remédios/cartelas
-            SizedBox(
-              height: 46,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                itemCount: _packs.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 10),
-                itemBuilder: (context, index) {
-                  final item = _packs[index];
-                  final selected = index == _selectedIndex;
-                  return ChoiceChip(
-                    label: Text(item.medicationName),
-                    selected: selected,
-                    onSelected: (_) => setState(() => _selectedIndex = index),
-                    selectedColor: AppTheme.expectedAccent.withOpacity(0.22),
-                    backgroundColor: AppTheme.surface,
-                    labelStyle: TextStyle(
-                      color: selected ? AppTheme.expectedAccent : Colors.white70,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                    side: BorderSide(
-                      color: selected
-                          ? AppTheme.expectedAccent
-                          : Colors.white.withOpacity(0.1),
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // 2. Painel de conferência rápida (O que deveria estar na cartela agora)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _StatusBanner(
-                pack: pack,
-                takenCount: takenCount,
-                expectedCount: expectedCount,
-                total: total,
-                diff: diff,
-                onEditStart: _pickStartDate,
-              ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // 3. A Cartela 3D Interativa
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
-                  child: BlisterBoard(
-                    key: ValueKey(pack.id),
-                    pack: pack,
-                    now: _now,
-                    onPillTap: _togglePill,
-                  ),
-                ),
-              ),
-            ),
-
-            // 4. Legenda visual no rodapé
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 6, 16, 14),
-              child: _LegendRow(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBanner extends StatelessWidget {
-  final MedicationPack pack;
-  final int takenCount;
-  final int expectedCount;
-  final int total;
-  final int diff;
-  final VoidCallback onEditStart;
-
-  const _StatusBanner({
-    required this.pack,
-    required this.takenCount,
-    required this.expectedCount,
-    required this.total,
-    required this.diff,
-    required this.onEditStart,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final remainingExpected = (total - expectedCount).clamp(0, total);
-    final remainingActual = (total - takenCount).clamp(0, total);
-
-    final Color statusColor;
-    final String statusText;
-    if (diff == 0) {
-      statusColor = AppTheme.takenAccent;
-      statusText =
-          'Em dia! A cartela física deve ter $remainingExpected comp. restantes.';
-    } else if (diff < 0) {
-      statusColor = AppTheme.lateAccent;
-      statusText =
-          'Falta marcar ${diff.abs()} comp. (deveriam restar $remainingExpected na cartela, mas há $remainingActual).';
-    } else {
-      statusColor = AppTheme.expectedAccent;
-      statusText =
-          'Você destacou $diff comp. adiantado em relação ao horário.';
-    }
-
-    final startStr =
-        '${pack.startedAt.day.toString().padLeft(2, '0')}/${pack.startedAt.month.toString().padLeft(2, '0')} às ${pack.startedAt.hour.toString().padLeft(2, '0')}:${pack.startedAt.minute.toString().padLeft(2, '0')}';
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: statusColor.withOpacity(0.45)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: Paper.sheet,
+      body: Stack(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                ),
+          const Positioned.fill(child: PaperGrain()),
+          SafeArea(
+            bottom: false,
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '${pack.template.name} • ${pack.dosageLabel}',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
+              padding: const EdgeInsets.fromLTRB(
+                Paper.margin,
+                10,
+                Paper.margin,
+                28,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _masthead(),
+                  const SizedBox(height: 3),
+                  const HandDrawnRule(),
+                  const SizedBox(height: 22),
+                  _entrance(
+                    from: 0.04,
+                    to: 0.52,
+                    slide: 12,
+                    child: _heroBlock(hero),
                   ),
-                ),
-              ),
-              InkWell(
-                onTap: onEditStart,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  child: Text(
-                    'Início: $startStr',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppTheme.expectedAccent,
-                      fontWeight: FontWeight.w600,
+                  const SizedBox(height: 22),
+                  _entrance(
+                    from: 0.14,
+                    to: 0.62,
+                    slide: 10,
+                    child: _tabs(),
+                  ),
+                  const SizedBox(height: 16),
+                  _entrance(
+                    from: 0.28,
+                    to: 1.0,
+                    slide: 18,
+                    overshoot: true,
+                    child: AnimatedSwitcher(
+                      duration: Motion.flip,
+                      switchInCurve: Curves.easeOutCubic,
+                      switchOutCurve: Curves.easeInCubic,
+                      transitionBuilder: (child, animation) =>
+                          _PageFlip(animation: animation, child: child),
+                      child: BlisterSheet(
+                        key: ValueKey(_pack.id),
+                        pack: _pack,
+                        now: _now,
+                        onPillTap: _togglePill,
+                        onEditStart: _editStart,
+                      ),
                     ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  _legend(),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Toque num comprimido para marcá-lo.',
+                    textAlign: TextAlign.center,
+                    style: Hand.text(
+                      size: 11,
+                      color: Paper.inkFaint,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            statusText,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.white.withOpacity(0.88),
             ),
           ),
         ],
       ),
     );
   }
-}
 
-class _LegendRow extends StatelessWidget {
-  const _LegendRow();
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _masthead() {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: const [
-        _LegendItem(
-          color: AppTheme.expectedAccent,
-          label: 'Alvo atual (deve tomar/estar aqui)',
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          'Cartela',
+          style: Hand.display(size: 17, weight: 600, tracking: -0.2),
         ),
-        _LegendItem(
-          color: AppTheme.lateAccent,
-          label: 'Passou da hora',
+        const SizedBox(width: 9),
+        Flexible(
+          child: Text(
+            'um diário de comprimidos',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Hand.text(
+              size: 10.5,
+              color: Paper.inkFaint,
+              height: 1.6,
+            ),
+          ),
         ),
-        _LegendItem(
-          color: Color(0xFF374151),
-          label: 'Já destacado',
+        const Spacer(),
+        Text(
+          _dateLabel(_now),
+          style: Hand.numeric(size: 10.5, color: Paper.inkSoft),
         ),
       ],
     );
   }
-}
 
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-
-  const _LegendItem({required this.color, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget _heroBlock(_Hero hero) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          hero.lead,
+          style: Hand.display(size: 39, weight: 500, height: 0.98),
+        ),
+        Text(
+          hero.tail,
+          style: Hand.display(
+            size: 39,
+            weight: 400,
+            italic: true,
+            height: 1.02,
+          ),
+        ),
+        const SizedBox(height: 9),
+        Text(hero.note, style: Hand.text(size: 12.5, color: Paper.inkSoft)),
+      ],
+    );
+  }
+
+  Widget _tabs() {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      clipBehavior: Clip.none,
+      child: Padding(
+        padding: const EdgeInsets.only(top: 6),
+        child: Row(
+          children: [
+            for (var i = 0; i < _packs.length; i++) ...[
+              if (i > 0) const SizedBox(width: 7),
+              PaperTab(
+                label: _packs[i].medicationName,
+                index: i,
+                active: i == _selected,
+                onTap: () => setState(() => _selected = i),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _legend() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        PencilRing(
+          width: 14,
+          height: 14,
+          progress: 1,
+          seed: 3,
+        ),
+        const SizedBox(width: 6),
+        Text(
+          'o de agora',
+          style: Hand.text(size: 10.5, color: Paper.inkFaint),
+        ),
+        const SizedBox(width: 18),
         Container(
-          width: 10,
-          height: 10,
+          width: 9,
+          height: 9,
           decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
+            border: Border.all(color: Paper.oxide, width: 1.3),
+            borderRadius: BorderRadius.circular(1),
           ),
         ),
         const SizedBox(width: 6),
         Text(
-          label,
-          style: const TextStyle(fontSize: 11, color: Colors.white70),
+          'atrasado',
+          style: Hand.text(size: 10.5, color: Paper.inkFaint),
         ),
       ],
+    );
+  }
+
+  /// One orchestrated entrance: text rises, tabs settle, the pack lands.
+  Widget _entrance({
+    required double from,
+    required double to,
+    required double slide,
+    required Widget child,
+    bool overshoot = false,
+  }) {
+    return AnimatedBuilder(
+      animation: _enter,
+      builder: (context, child) {
+        final v = _enter.value;
+        final o = Interval(from, to, curve: Curves.easeOut)
+            .transform(v)
+            .clamp(0.0, 1.0);
+        final s = Interval(
+          from,
+          to,
+          curve: overshoot ? Curves.easeOutBack : Curves.easeOutCubic,
+        ).transform(v);
+        final scale = overshoot ? 0.94 + 0.06 * s : 1.0;
+
+        return Opacity(
+          opacity: o,
+          child: Transform.translate(
+            offset: Offset(0, (1 - o) * slide),
+            child: Transform.scale(scale: scale, child: child!),
+          ),
+        );
+      },
+      child: child,
+    );
+  }
+}
+
+class _Hero {
+  final String lead;
+  final String tail;
+  final String note;
+
+  const _Hero(this.lead, this.tail, this.note);
+}
+
+_Hero _heroCopy(MedicationPack pack, DateTime now) {
+  final next = pack.nextIndex;
+  if (next == null) {
+    return _Hero(
+      'Cartela',
+      'vazia.',
+      'Você tomou os ${pack.template.totalPills} comprimidos desta cartela.',
+    );
+  }
+
+  final due = pack.scheduledTimeFor(next);
+  final remaining = pack.remainingCount;
+  final late = now.difference(due) > const Duration(minutes: 30);
+
+  if (late) {
+    return _Hero(
+      'Uma dose ficou',
+      'para trás.',
+      'Era para as ${_hhmm(due)}, há ${_gap(now.difference(due))}. '
+      'O comprimido ${next + 1} ainda está na cartela.',
+    );
+  }
+
+  if (due.difference(now).inMinutes <= 30) {
+    return _Hero(
+      'Um comprimido',
+      'agora.',
+      'Previsto para as ${_hhmm(due)}. Restam $remaining nesta cartela.',
+    );
+  }
+
+  return _Hero(
+    'O próximo é',
+    'às ${_hhmm(due)}.',
+    'Daqui a ${_gap(due.difference(now))}. Restam $remaining nesta cartela.',
+  );
+}
+
+String _hhmm(DateTime d) {
+  final hh = d.hour.toString().padLeft(2, '0');
+  final mm = d.minute.toString().padLeft(2, '0');
+  return '$hh:$mm';
+}
+
+String _gap(Duration d) {
+  if (d.inMinutes < 60) return '${d.inMinutes} min';
+  if (d.inHours < 24) return '${d.inHours} h';
+  final days = d.inDays;
+  return days == 1 ? '1 dia' : '$days dias';
+}
+
+String _dateLabel(DateTime d) {
+  const weekdays = ['seg', 'ter', 'qua', 'qui', 'sex', 'sáb', 'dom'];
+  const months = [
+    'jan',
+    'fev',
+    'mar',
+    'abr',
+    'mai',
+    'jun',
+    'jul',
+    'ago',
+    'set',
+    'out',
+    'nov',
+    'dez',
+  ];
+  return '${weekdays[d.weekday - 1]}, ${d.day} ${months[d.month - 1]}';
+}
+
+/// Switching packs turns the page, it does not cross-fade.
+class _PageFlip extends StatelessWidget {
+  final Animation<double> animation;
+  final Widget child;
+
+  const _PageFlip({required this.animation, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final t = Curves.easeOutCubic.transform(animation.value);
+        return Opacity(
+          opacity: t.clamp(0.0, 1.0),
+          child: Transform(
+            alignment: Alignment.centerLeft,
+            transform: Matrix4.identity()
+              ..setEntry(3, 2, 0.0015)
+              ..rotateY((1 - t) * -0.55),
+            child: child!,
+          ),
+        );
+      },
+      child: child,
     );
   }
 }

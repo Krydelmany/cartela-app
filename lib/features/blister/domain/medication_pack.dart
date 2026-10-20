@@ -1,16 +1,16 @@
 import 'blister_template.dart';
 
 enum CavityStatus {
-  /// Já foi tomado/destacado (mostra o fundo escuro/alumínio rasgado).
+  /// Already pushed through: the foil is torn.
   taken,
 
-  /// Deveria já ter sido tomado pelo horário, mas ainda está na cartela!
+  /// A dose went by and this pill is still in the pack.
   overdue,
 
-  /// É o comprimido da vez (alvo atual para conferência visual).
+  /// The next pill in the pack — the one to look for right now.
   currentTarget,
 
-  /// Comprimido futuro, intacto na cartela.
+  /// Still sealed, still in the future.
   intact,
 }
 
@@ -33,58 +33,55 @@ class MedicationPack {
     required this.takenIndices,
   });
 
-  /// Quantos comprimidos já deveriam ter sido tomados até [now]
-  /// considerando que o 1º (índice 0) é tomado no momento [startedAt].
+  int get takenCount => takenIndices.length;
+
+  int get remainingCount => template.totalPills - takenCount;
+
+  /// Doses that should have left the pack by [now]. Dose 0 is taken at [startedAt].
   int expectedTakenCountAt(DateTime now) {
     if (now.isBefore(startedAt)) return 0;
-    final elapsedMinutes = now.difference(startedAt).inMinutes;
-    final intervalMinutes = doseInterval.inMinutes;
-    if (intervalMinutes <= 0) return 0;
-    final count = (elapsedMinutes ~/ intervalMinutes) + 1;
+    final interval = doseInterval.inMinutes;
+    if (interval <= 0) return 0;
+    final count = now.difference(startedAt).inMinutes ~/ interval + 1;
     return count.clamp(0, template.totalPills);
   }
 
-  /// Índice (0-based) do último comprimido que já deveria ter saído da cartela,
-  /// ou do próximo na fila imediata.
-  int? expectedCurrentIndexAt(DateTime now) {
-    final expectedCount = expectedTakenCountAt(now);
-    if (expectedCount <= 0) return 0;
-    if (expectedCount >= template.totalPills) return template.totalPills - 1;
-    return expectedCount - 1;
+  /// The first pill still sealed — the next one physically in line.
+  int? get nextIndex {
+    for (var i = 0; i < template.totalPills; i++) {
+      if (!takenIndices.contains(i)) return i;
+    }
+    return null;
   }
 
-  /// Horário programado para um comprimido específico `pillIndex`.
-  DateTime scheduledTimeFor(int pillIndex) {
-    return startedAt.add(doseInterval * pillIndex);
+  /// Doses that came due strictly before the one in hand and were skipped.
+  int missedCountAt(DateTime now) {
+    final expected = expectedTakenCountAt(now);
+    var missed = 0;
+    for (var i = 0; i < expected - 1; i++) {
+      if (!takenIndices.contains(i)) missed++;
+    }
+    return missed;
   }
+
+  DateTime scheduledTimeFor(int pillIndex) =>
+      startedAt.add(doseInterval * pillIndex);
 
   CavityStatus statusForPill(int pillIndex, DateTime now) {
-    if (takenIndices.contains(pillIndex)) {
-      return CavityStatus.taken;
-    }
+    if (takenIndices.contains(pillIndex)) return CavityStatus.taken;
 
-    final expectedCount = expectedTakenCountAt(now);
-    // Se expectedCount == 8, os índices 0..7 já venceram.
-    // O índice 7 (expectedCount - 1) é a dose atual/recente; anteriores não tomados estão atrasados.
-    if (pillIndex < expectedCount - 1) {
-      return CavityStatus.overdue;
-    }
-    if (pillIndex == expectedCount - 1 ||
-        (expectedCount == 0 && pillIndex == 0)) {
-      return CavityStatus.currentTarget;
-    }
-    // Se já tomou todos até o esperado, destaca o próximo da fila como referência visual
-    if (pillIndex == expectedCount && takenIndices.contains(expectedCount - 1)) {
-      return CavityStatus.currentTarget;
-    }
+    final expected = expectedTakenCountAt(now);
+    final next = nextIndex;
+
+    // Anything older than the dose currently due was skipped.
+    if (pillIndex < expected - 1) return CavityStatus.overdue;
+    if (pillIndex == next) return CavityStatus.currentTarget;
     return CavityStatus.intact;
   }
 
   MedicationPack togglePill(int pillIndex) {
     final updated = Set<int>.from(takenIndices);
-    if (!updated.remove(pillIndex)) {
-      updated.add(pillIndex);
-    }
+    if (!updated.remove(pillIndex)) updated.add(pillIndex);
     return copyWith(takenIndices: updated);
   }
 

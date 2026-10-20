@@ -3,30 +3,49 @@ import 'package:cartela_app/features/blister/data/preset_templates.dart';
 import 'package:cartela_app/features/blister/domain/medication_pack.dart';
 
 void main() {
-  test('Calcula corretamente quantos comprimidos deveriam ter saído da cartela', () {
-    final start = DateTime(2026, 10, 10, 8, 0);
-    final pack = MedicationPack(
-      id: 't1',
-      medicationName: 'Teste 12h',
-      dosageLabel: '12/12h',
+  final start = DateTime(2026, 10, 10, 8);
+
+  MedicationPack packWith(Set<int> taken) {
+    return MedicationPack(
+      id: 'test',
+      medicationName: 'Teste',
+      dosageLabel: 'a cada 12 horas',
       template: PresetTemplates.oblongYellow10,
       startedAt: start,
       doseInterval: const Duration(hours: 12),
-      takenIndices: const {0, 1},
+      takenIndices: taken,
     );
+  }
 
-    // Após 25 horas (0h, 12h, 24h) -> 3 comprimidos já deveriam ter sido tomados (índices 0, 1, 2)
+  test('conta quantas doses já venceram', () {
+    final pack = packWith({0, 1});
     final now = start.add(const Duration(hours: 25));
+
     expect(pack.expectedTakenCountAt(now), 3);
-
-    // 0 e 1 foram tomados
+    expect(pack.nextIndex, 2);
     expect(pack.statusForPill(0, now), CavityStatus.taken);
-    expect(pack.statusForPill(1, now), CavityStatus.taken);
-
-    // Índice 2 é o comprimido esperado da vez
     expect(pack.statusForPill(2, now), CavityStatus.currentTarget);
-
-    // Índice 3 ainda está intacto para o futuro
     expect(pack.statusForPill(3, now), CavityStatus.intact);
+  });
+
+  test('dose pulada é marcada como atrasada', () {
+    final pack = packWith({0, 2});
+    final now = start.add(const Duration(hours: 25));
+
+    expect(pack.nextIndex, 1);
+    expect(pack.missedCountAt(now), 1);
+    expect(pack.statusForPill(1, now), CavityStatus.overdue);
+  });
+
+  test('tocar alterna entre marcado e não marcado', () {
+    final pack = packWith({0});
+
+    expect(pack.togglePill(1).takenIndices, {0, 1});
+    expect(pack.togglePill(1).togglePill(1).takenIndices, {0});
+  });
+
+  test('cartela vazia não tem próximo', () {
+    final pack = packWith({0, 1, 2, 3, 4, 5, 6, 7, 8, 9});
+    expect(pack.nextIndex, isNull);
   });
 }

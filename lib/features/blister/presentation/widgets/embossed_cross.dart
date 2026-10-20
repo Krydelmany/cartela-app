@@ -1,33 +1,28 @@
 import 'package:flutter/material.dart';
+import '../../../../core/design/paper.dart';
 
-/// Desenha o relevo estrutural em formato de cruz (+) prensado no plástico/alumínio
-/// como visto no centro da Foto 2.
+/// The pressed cross relief found between the blisters of one of the packs.
 class EmbossedCross extends StatelessWidget {
   final double size;
 
-  const EmbossedCross({
-    super.key,
-    this.size = 44,
-  });
+  const EmbossedCross({super.key, this.size = 44});
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: _EmbossedCrossPainter(),
-      ),
+      child: CustomPaint(painter: _CrossPainter()),
     );
   }
 }
 
-class _EmbossedCrossPainter extends CustomPainter {
+class _CrossPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final armLength = size.width * 0.78;
-    final armThickness = size.width * 0.26;
+    final armLength = size.width * 0.76;
+    final armThickness = size.width * 0.24;
     final radius = Radius.circular(armThickness / 2);
 
     final horizontal = RRect.fromRectAndRadius(
@@ -38,45 +33,37 @@ class _EmbossedCrossPainter extends CustomPainter {
       Rect.fromCenter(center: center, width: armThickness, height: armLength),
       radius,
     );
-
     final path = Path()
       ..addRRect(horizontal)
       ..addRRect(vertical);
 
-    // Sombra externa escura do baixo-relevo
+    // The relief sits in a shadow, like it is pressed into the foil.
     canvas.save();
-    canvas.translate(1.5, 2.0);
+    canvas.translate(1.2, 1.6);
     canvas.drawPath(
       path,
       Paint()
-        ..color = Colors.black.withOpacity(0.45)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
+        ..color = const Color(0x55201E18)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.2),
     );
     canvas.restore();
 
-    // Corpo metálico prensado
-    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final rect = Offset.zero & size;
     canvas.drawPath(
       path,
       Paint()
         ..shader = const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF9EA6B2),
-            Color(0xFFE2E6EC),
-            Color(0xFF8B93A0),
-          ],
+          colors: [Paper.foilLo, Paper.foilHi, Paper.foilMid],
         ).createShader(rect),
     );
-
-    // Brilho especular na borda interna
     canvas.drawPath(
       path,
       Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = Colors.white.withOpacity(0.65),
+        ..strokeWidth = 1.0
+        ..color = Colors.white.withOpacity(0.6),
     );
   }
 
