@@ -163,7 +163,7 @@ class _BlisterSheetState extends State<BlisterSheet>
           ),
           const SizedBox(height: 1),
           Text(
-            '${template.subtitle} · ${widget.pack.dosageLabel}',
+            widget.pack.dosageLabel,
             style: Hand.text(size: 10.5, color: Paper.inkSoft),
           ),
           const SizedBox(height: 10),

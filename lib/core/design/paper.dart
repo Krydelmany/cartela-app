@@ -10,8 +10,8 @@ class Paper {
   static const Color sheetDeep = Color(0xFFEAE4D4);
   static const Color slip = Color(0xFFFBF7EC);
   static const Color ink = Color(0xFF26241E);
-  static const Color inkSoft = Color(0xFF615C50);
-  static const Color inkFaint = Color(0xFFA29A87);
+  static const Color inkSoft = Color(0xFF554F43);
+  static const Color inkFaint = Color(0xFF6F6859);
   static const Color rule = Color(0xFFD3CBB7);
   static const Color oxide = Color(0xFFA8432A);
 
