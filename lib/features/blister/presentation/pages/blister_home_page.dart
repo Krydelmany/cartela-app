@@ -95,7 +95,9 @@ class _BlisterHomePageState extends State<BlisterHomePage>
 
     setState(() {
       if (result.delete) {
-        _packs.removeAt(index!);
+        final removed = index!;
+        _packs.removeAt(removed);
+        if (removed < _selected) _selected--;
         if (_selected >= _packs.length) _selected = _packs.length - 1;
       } else if (index == null) {
         _packs.add(result.pack!);
@@ -356,7 +358,7 @@ class _AddTab extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         child: Container(
           width: 44,
-          height: 40,
+          height: 44,
           decoration: BoxDecoration(
             color: Paper.sheetDeep.withOpacity(0.6),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
